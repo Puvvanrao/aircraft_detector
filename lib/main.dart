@@ -327,8 +327,8 @@ class _DetectorHomePageState extends State<DetectorHomePage> {
                 child: selectedImage == null
                     ? const Center(child: Text("No Image Selected"))
                     : InteractiveViewer(
-                        minScale: 0.5,
-                        maxScale: 5.0,
+                        minScale: 1.0,
+                        maxScale: 8.0,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             return Stack(
