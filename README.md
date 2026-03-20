@@ -1,17 +1,100 @@
-# aircraft_detector
+# ✈️ Aircraft Detector App
 
-A new Flutter project.
+A Flutter-based mobile application that detects aircraft in satellite images using a YOLO model.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 🚀 Features
 
-A few resources to get you started if this is your first Flutter project:
+- 🛰️ Detect aircraft from satellite images  
+- 📸 Single image detection  
+- 📂 Batch image detection  
+- 📊 Detection history with saved results  
+- ⚡ Fast inference using YOLO  
+- 🔍 Zoom and inspect detection results  
+- 🧠 Adjustable confidence & NMS thresholds  
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 🛠️ Tech Stack
+
+- Flutter (UI)  
+- Dart  
+- YOLO (ONNX model)  
+- Local storage (SharedPreferences)  
+
+---
+
+## 📱 Screens
+
+- Login / Guest mode  
+- Detector screen  
+- Batch results screen  
+- Detection history  
+
+---
+
+## 📸 Screenshots
+
+### 🔐 Login
+![Login](screenshots/login.png)
+
+---
+
+### 🏠 Home
+![Home](screenshots/homepage.png)
+
+---
+
+### ⚙️ Detection Controls
+![Controls](screenshots/detection_control.png)
+
+---
+
+### ✈️ Aircraft Detection (YOLO + Interactive Zoom)
+![Detection](screenshots/detection_interactive.png)
+
+---
+
+### 📊 Batch Results
+![Batch](screenshots/batch_result.png)
+
+---
+
+### 🕘 Detection History
+![History](screenshots/history.png)
+
+---
+
+## ⚙️ How to Run
+
+```bash
+flutter pub get
+flutter run
+
+
+## 📂 Project Structure
+
+- `lib/screens/` → UI screens (home, detector, history)
+- `lib/widgets/` → reusable UI components
+- `lib/services/` → business logic & detection handling
+- `assets/yolo11l-best.onnx` → YOLO model file
+
+---
+
+## 🧠 Model
+
+- YOLO-based object detection
+- Optimized for aircraft detection in aerial/satellite imagery
+
+---
+
+## 👨‍💻 Author
+
+- Puvvanrao
+
+---
+
+## ⭐ Notes
+
+- This project was developed as part of an aircraft detection system using deep learning and mobile deployment.
