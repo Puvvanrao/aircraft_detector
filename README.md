@@ -72,6 +72,7 @@ A Flutter-based mobile application that detects aircraft in satellite images usi
 flutter pub get
 flutter run
 
+---
 
 ## 📂 Project Structure
 
