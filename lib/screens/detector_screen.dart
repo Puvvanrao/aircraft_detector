@@ -1,13 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:onnxruntime/onnxruntime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'batch_results_screen.dart';
 
 class DetectionBox {
@@ -44,13 +46,12 @@ class DetectionBox {
       confidence: (json['confidence'] as num).toDouble(),
     );
   }
-
 }
 
 class DetectorScreen extends StatefulWidget {
   final String? initialImagePath;
   final List<DetectionBox>? initialBoxes;
- 
+
   const DetectorScreen({
     super.key,
     this.initialImagePath,
@@ -96,6 +97,9 @@ class _DetectorScreenState extends State<DetectorScreen> {
   static const int tileSize = 640;
   static const int tileOverlap = 100;
 
+  final TransformationController _transformController =
+      TransformationController();
+
   Future<void> loadInitialImageDimensions(File file) async {
     final bytes = await file.readAsBytes();
     final decoded = img.decodeImage(bytes);
@@ -110,18 +114,12 @@ class _DetectorScreenState extends State<DetectorScreen> {
 
   List<ImageTile> splitIntoTiles(img.Image image) {
     final tiles = <ImageTile>[];
-
     final step = tileSize - tileOverlap;
 
     for (int y = 0; y < image.height; y += step) {
       for (int x = 0; x < image.width; x += step) {
-        final w = (x + tileSize > image.width)
-            ? image.width - x
-            : tileSize;
-
-        final h = (y + tileSize > image.height)
-            ? image.height - y
-            : tileSize;
+        final w = (x + tileSize > image.width) ? image.width - x : tileSize;
+        final h = (y + tileSize > image.height) ? image.height - y : tileSize;
 
         final tile = img.copyCrop(
           image,
@@ -165,7 +163,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
     int skippedTiles = 0;
 
     for (final tile in tiles) {
-      // 🚀 Skip empty tiles
       if (shouldSkipTile(tile.image)) {
         skippedTiles++;
         continue;
@@ -174,9 +171,7 @@ class _DetectorScreenState extends State<DetectorScreen> {
       final tileBoxes = await runDetectionOnDecodedImage(tile.image);
 
       for (final box in tileBoxes) {
-
         allBoxes.add(
-                    
           DetectionBox(
             left: box.left + tile.x,
             top: box.top + tile.y,
@@ -196,9 +191,11 @@ class _DetectorScreenState extends State<DetectorScreen> {
       originalImageHeight = decoded.height;
       detections = filteredBoxes;
       inferenceMs = 0;
-      detectionText = "Tiled detection found ${filteredBoxes.length} boxes "
-      "from ${tiles.length} tiles ($skippedTiles skipped).";
+      detectionText =
+          "Tiled detection found ${filteredBoxes.length} boxes from ${tiles.length} tiles ($skippedTiles skipped).";
     });
+
+    _resetZoom();
   }
 
   Future<List<DetectionBox>> runDetectionOnDecodedImage(img.Image image) async {
@@ -215,7 +212,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
     for (int y = 0; y < modelSize; y++) {
       for (int x = 0; x < modelSize; x++) {
         final pixel = resized.getPixel(x, y);
-
         final pixelIndex = y * modelSize + x;
 
         input[pixelIndex] = pixel.r / 255.0;
@@ -272,7 +268,7 @@ class _DetectorScreenState extends State<DetectorScreen> {
 
         final scaleX = image.width / modelSize;
         final scaleY = image.height / modelSize;
-        
+
         candidates.add(
           DetectionBox(
             left: left * scaleX,
@@ -285,8 +281,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
       }
 
       return candidates;
-
-
     } finally {
       inputTensor?.release();
       runOptions?.release();
@@ -334,6 +328,47 @@ class _DetectorScreenState extends State<DetectorScreen> {
     return selected;
   }
 
+  void _updateDetections() {
+    if (hasCachedDetections) {
+      setState(() {
+        detections = applyNms(
+          rawDetections
+              .where((d) => d.confidence >= confidenceThreshold)
+              .toList(),
+        );
+        detectionText = "Aircraft detected: ${detections.length}";
+      });
+    }
+  }
+
+  void _resetZoom() {
+    _transformController.value = Matrix4.identity();
+  }
+
+  void _zoom(double scaleFactor) {
+    final currentScale = _transformController.value.getMaxScaleOnAxis();
+    final newScale = (currentScale * scaleFactor).clamp(1.0, 8.0);
+    _transformController.value = Matrix4.identity()..scale(newScale);
+  }
+
+  Widget _card({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -344,7 +379,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
 
       if (file.existsSync()) {
         selectedImage = file;
-
         loadInitialImageDimensions(file);
 
         if (widget.initialBoxes != null && widget.initialBoxes!.isNotEmpty) {
@@ -383,7 +417,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
           (widget.initialBoxes == null || widget.initialBoxes!.isEmpty)) {
         await runDetection(selectedImage!);
       }
-
     } catch (e) {
       setState(() {
         status = "Model failed to load: $e";
@@ -393,7 +426,6 @@ class _DetectorScreenState extends State<DetectorScreen> {
 
   Future<void> pickImage() async {
     final result = await FilePicker.platform.pickFiles(type: FileType.image);
-
     if (result == null || result.files.single.path == null) return;
 
     final file = File(result.files.single.path!);
@@ -405,6 +437,7 @@ class _DetectorScreenState extends State<DetectorScreen> {
       inferenceMs = 0;
     });
 
+    _resetZoom();
     await runDetection(file);
   }
 
@@ -430,6 +463,7 @@ class _DetectorScreenState extends State<DetectorScreen> {
         inferenceMs = 0;
       });
 
+      _resetZoom();
       await runDetection(file);
 
       batchResults.add(
@@ -479,171 +513,172 @@ class _DetectorScreenState extends State<DetectorScreen> {
     if (isDetecting) return;
 
     isDetecting = true;
-    
-    try {    
-    if (useTiling) {
-      await runDetectionTiled(file);
-      return;
-    }
-
-    if (session == null) {
-      setState(() {
-        detectionText = "Model is not loaded.";
-      });
-      return;
-    }
-
-    OrtValueTensor? inputTensor;
-    OrtRunOptions? runOptions;
-    List<OrtValue?>? outputs;
 
     try {
-      final stopwatch = Stopwatch()..start();
+      if (useTiling) {
+        await runDetectionTiled(file);
+        return;
+      }
 
-      final imageBytes = await file.readAsBytes();
-      final decoded = img.decodeImage(imageBytes);
-
-      if (decoded == null) {
+      if (session == null) {
         setState(() {
-          detectionText = "Could not decode image.";
+          detectionText = "Model is not loaded.";
         });
         return;
       }
 
-      originalImageWidth = decoded.width;
-      originalImageHeight = decoded.height;
+      OrtValueTensor? inputTensor;
+      OrtRunOptions? runOptions;
+      List<OrtValue?>? outputs;
 
-      final resized =
-          img.copyResize(decoded, width: modelSize, height: modelSize);
+      try {
+        final stopwatch = Stopwatch()..start();
 
-      final input = Float32List(1 * 3 * modelSize * modelSize);
-      int pixelIndex = 0;
+        final imageBytes = await file.readAsBytes();
+        final decoded = img.decodeImage(imageBytes);
 
-      for (int y = 0; y < modelSize; y++) {
-        for (int x = 0; x < modelSize; x++) {
-          final pixel = resized.getPixel(x, y);
+        if (decoded == null) {
+          setState(() {
+            detectionText = "Could not decode image.";
+          });
+          return;
+        }
 
-          input[pixelIndex] = pixel.r / 255.0;
-          input[modelSize * modelSize + pixelIndex] = pixel.g / 255.0;
-          input[2 * modelSize * modelSize + pixelIndex] = pixel.b / 255.0;
+        originalImageWidth = decoded.width;
+        originalImageHeight = decoded.height;
 
-          pixelIndex++;
+        final resized = img.copyResize(
+          decoded,
+          width: modelSize,
+          height: modelSize,
+        );
+
+        final input = Float32List(1 * 3 * modelSize * modelSize);
+        int pixelIndex = 0;
+
+        for (int y = 0; y < modelSize; y++) {
+          for (int x = 0; x < modelSize; x++) {
+            final pixel = resized.getPixel(x, y);
+
+            input[pixelIndex] = pixel.r / 255.0;
+            input[modelSize * modelSize + pixelIndex] = pixel.g / 255.0;
+            input[2 * modelSize * modelSize + pixelIndex] = pixel.b / 255.0;
+
+            pixelIndex++;
+          }
+        }
+
+        inputTensor = OrtValueTensor.createTensorWithDataList(
+          input,
+          [1, 3, modelSize, modelSize],
+        );
+
+        runOptions = OrtRunOptions();
+        outputs = session!.run(
+          runOptions,
+          {'images': inputTensor},
+        );
+
+        final raw = outputs[0]?.value;
+        if (raw == null) {
+          setState(() {
+            detectionText = "No model output returned.";
+          });
+          return;
+        }
+
+        final rawList = raw as List;
+        final channels = rawList[0] as List;
+        if (channels.length < 5) {
+          setState(() {
+            detectionText = "Unexpected output shape.";
+          });
+          return;
+        }
+
+        final xs = List<num>.from(channels[0] as List);
+        final ys = List<num>.from(channels[1] as List);
+        final ws = List<num>.from(channels[2] as List);
+        final hs = List<num>.from(channels[3] as List);
+        final confs = List<num>.from(channels[4] as List);
+
+        final candidates = <DetectionBox>[];
+
+        for (int i = 0; i < confs.length; i++) {
+          final confidence = confs[i].toDouble();
+          if (confidence < confidenceThreshold) continue;
+
+          final cx = xs[i].toDouble();
+          final cy = ys[i].toDouble();
+          final w = ws[i].toDouble();
+          final h = hs[i].toDouble();
+
+          if (w > 300 || h > 300) continue;
+
+          double left = cx - w / 2.0;
+          double top = cy - h / 2.0;
+          double right = cx + w / 2.0;
+          double bottom = cy + h / 2.0;
+
+          left = left.clamp(0.0, modelSize.toDouble());
+          top = top.clamp(0.0, modelSize.toDouble());
+          right = right.clamp(0.0, modelSize.toDouble());
+          bottom = bottom.clamp(0.0, modelSize.toDouble());
+
+          if (right <= left || bottom <= top) continue;
+
+          final scaleX = originalImageWidth / modelSize;
+          final scaleY = originalImageHeight / modelSize;
+
+          candidates.add(
+            DetectionBox(
+              left: left * scaleX,
+              top: top * scaleY,
+              right: right * scaleX,
+              bottom: bottom * scaleY,
+              confidence: confidence,
+            ),
+          );
+        }
+
+        stopwatch.stop();
+
+        rawDetections = candidates;
+        hasCachedDetections = true;
+
+        setState(() {
+          detections = applyNms(
+            rawDetections
+                .where((d) => d.confidence >= confidenceThreshold)
+                .toList(),
+          );
+          inferenceMs = stopwatch.elapsedMilliseconds;
+          detectionText = "Aircraft detected: ${detections.length}";
+        });
+
+        await saveDetectionHistory(
+          imagePath: file.path,
+          aircraftCount: detections.length,
+          inferenceMs: stopwatch.elapsedMilliseconds,
+          boxes: detections.map((b) => b.toJson()).toList(),
+        );
+      } catch (e) {
+        setState(() {
+          detectionText = "Detection error: $e";
+        });
+      } finally {
+        inputTensor?.release();
+        runOptions?.release();
+        if (outputs != null) {
+          for (final out in outputs) {
+            out?.release();
+          }
         }
       }
-
-      inputTensor = OrtValueTensor.createTensorWithDataList(
-        input,
-        [1, 3, modelSize, modelSize],
-      );
-
-      runOptions = OrtRunOptions();
-      outputs = session!.run(
-        runOptions,
-        {'images': inputTensor},
-      );
-
-      final raw = outputs[0]?.value;
-      if (raw == null) {
-        setState(() {
-          detectionText = "No model output returned.";
-        });
-        return;
-      }
-
-      final rawList = raw as List;
-      final channels = rawList[0] as List;
-      if (channels.length < 5) {
-        setState(() {
-          detectionText = "Unexpected output shape.";
-        });
-        return;
-      }
-
-      final xs = List<num>.from(channels[0] as List);
-      final ys = List<num>.from(channels[1] as List);
-      final ws = List<num>.from(channels[2] as List);
-      final hs = List<num>.from(channels[3] as List);
-      final confs = List<num>.from(channels[4] as List);
-
-      final candidates = <DetectionBox>[];
-
-      for (int i = 0; i < confs.length; i++) {
-        final confidence = confs[i].toDouble();
-        if (confidence < confidenceThreshold) continue;
-
-        final cx = xs[i].toDouble();
-        final cy = ys[i].toDouble();
-        final w = ws[i].toDouble();
-        final h = hs[i].toDouble();
-
-        if (w > 300 || h > 300) continue;
-
-        double left = cx - w / 2.0;
-        double top = cy - h / 2.0;
-        double right = cx + w / 2.0;
-        double bottom = cy + h / 2.0;
-
-        left = left.clamp(0.0, modelSize.toDouble());
-        top = top.clamp(0.0, modelSize.toDouble());
-        right = right.clamp(0.0, modelSize.toDouble());
-        bottom = bottom.clamp(0.0, modelSize.toDouble());
-
-        if (right <= left || bottom <= top) continue;
-
-        final scaleX = originalImageWidth / modelSize;
-        final scaleY = originalImageHeight / modelSize;
-
-        candidates.add(
-          DetectionBox(
-            left: left * scaleX,
-            top: top * scaleY,
-            right: right * scaleX,
-            bottom: bottom * scaleY,
-            confidence: confidence,
-          ),
-        );
-      }
-
-      stopwatch.stop();
-
-      rawDetections = candidates;
-      hasCachedDetections = true;
-
-      setState(() {
-        detections = applyNms(
-          rawDetections
-              .where((d) => d.confidence >= confidenceThreshold)
-              .toList(),
-        );
-
-        inferenceMs = stopwatch.elapsedMilliseconds;
-        detectionText = "Aircraft detected: ${detections.length}";
-      });
-
-      await saveDetectionHistory(
-        imagePath: file.path,
-        aircraftCount: detections.length,
-        inferenceMs: stopwatch.elapsedMilliseconds,
-        boxes: detections.map((b) => b.toJson()).toList(),
-      );
-
-    } catch (e) {
-      setState(() {
-        detectionText = "Detection error: $e";
-      });
     } finally {
-      inputTensor?.release();
-      runOptions?.release();
-      if (outputs != null) {
-        for (final out in outputs) {
-          out?.release();
-        }
-      }
+      isDetecting = false;
     }
-    } finally {
-    isDetecting = false;
   }
-}
 
   double iou(DetectionBox a, DetectionBox b) {
     final interLeft = math.max(a.left, b.left);
@@ -665,6 +700,7 @@ class _DetectorScreenState extends State<DetectorScreen> {
 
   @override
   void dispose() {
+    _transformController.dispose();
     session?.release();
     super.dispose();
   }
@@ -675,156 +711,209 @@ class _DetectorScreenState extends State<DetectorScreen> {
         "Threshold: $confidenceThreshold   •   NMS: $nmsThreshold   •   Inference: $inferenceMs ms";
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text("Aircraft Detector"),
+        backgroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text(
-              status,
-              style: const TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              detectionText,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              metricsText,
-              style: const TextStyle(fontSize: 14),
-            ),
-
-            Text(
-              "Confidence Threshold: ${confidenceThreshold.toStringAsFixed(2)}",
-            ),
-
-            Slider(
-              value: confidenceThreshold,
-              min: 0.1,
-              max: 0.9,
-              divisions: 16,
-              label: confidenceThreshold.toStringAsFixed(2),
-              onChanged: (value) async {
-                setState(() {
-                  confidenceThreshold = value;
-                });
-              },
-              onChangeEnd: (value) {
-                if (hasCachedDetections) {
-                  setState(() {
-                    detections = applyNms(
-                      rawDetections
-                          .where((d) => d.confidence >= confidenceThreshold)
-                          .toList(),
-                    );
-
-                    detectionText = "Aircraft detected: ${detections.length}";
-                  });
-                }
-              }
-            ),
-
-            const SizedBox(height: 12),
-
-            Text("NMS Threshold: ${nmsThreshold.toStringAsFixed(2)}"),
-            Slider(
-              value: nmsThreshold,
-              min: 0.1,
-              max: 0.9,
-              divisions: 16,
-              label: nmsThreshold.toStringAsFixed(2),
-              onChanged: (value) async {
-                setState(() {
-                  nmsThreshold = value;
-                });
-              },
-              onChangeEnd: (value) {
-                if (hasCachedDetections) {
-                  setState(() {
-                    detections = applyNms(
-                      rawDetections
-                          .where((d) => d.confidence >= confidenceThreshold)
-                          .toList(),
-                    );
-
-                    detectionText = "Aircraft detected: ${detections.length}";
-                  });
-                }
-              },
-            ),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Use Tiling"),
-                Switch(
-                  value: useTiling,
-                  onChanged: (value) {
-                    setState(() {
-                      useTiling = value;
-                    });
-                  },
+                Text(
+                  status,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  detectionText,
+                  style: const TextStyle(fontSize: 15),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  metricsText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                  ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: pickImage,
-              child: const Text("Select Satellite Image"),
-            ),
-
-            const SizedBox(height: 10),
-
-            ElevatedButton(
-              onPressed: pickMultipleImages,
-              child: const Text("Detect Multiple Images"),
-            ),
-
-            const SizedBox(height: 20),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
+          ),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Detection Controls",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                child: selectedImage == null
-                ? const Center(child: Text("No Image Selected"))
-                : InteractiveViewer(
-                    minScale: 1.0,
-                    maxScale: 8.0,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Stack(
-                          children: [
-                            Positioned.fill(
-                              child: FittedBox(
-                                fit: BoxFit.contain,
-                                child: Image.file(selectedImage!),
-                              ),
-                            ),
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: DetectionPainter(
-                                  detections: detections,
-                                  imageWidth: originalImageWidth,
-                                  imageHeight: originalImageHeight,
+                const SizedBox(height: 12),
+                Text(
+                  "Confidence Threshold: ${confidenceThreshold.toStringAsFixed(2)}",
+                ),
+                Slider(
+                  value: confidenceThreshold,
+                  min: 0.1,
+                  max: 0.9,
+                  divisions: 16,
+                  label: confidenceThreshold.toStringAsFixed(2),
+                  onChanged: (value) {
+                    setState(() {
+                      confidenceThreshold = value;
+                    });
+                  },
+                  onChangeEnd: (_) => _updateDetections(),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "NMS Threshold: ${nmsThreshold.toStringAsFixed(2)}",
+                ),
+                Slider(
+                  value: nmsThreshold,
+                  min: 0.1,
+                  max: 0.9,
+                  divisions: 16,
+                  label: nmsThreshold.toStringAsFixed(2),
+                  onChanged: (value) {
+                    setState(() {
+                      nmsThreshold = value;
+                    });
+                  },
+                  onChangeEnd: (_) => _updateDetections(),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text("Use Tiling"),
+                    const SizedBox(width: 10),
+                    Switch(
+                      value: useTiling,
+                      onChanged: (value) {
+                        setState(() {
+                          useTiling = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          _card(
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: pickImage,
+                    icon: const Icon(Icons.image_search),
+                    label: const Text("Select Satellite Image"),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: pickMultipleImages,
+                    icon: const Icon(Icons.collections),
+                    label: const Text("Detect Multiple Images"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _card(
+            child: SizedBox(
+              height: 380,
+              child: selectedImage == null
+                  ? const Center(
+                      child: Text(
+                        "No Image Selected",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    )
+                  : ClipRect(
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: InteractiveViewer(
+                              transformationController: _transformController,
+                              panEnabled: true,
+                              scaleEnabled: true,
+                              minScale: 1.0,
+                              maxScale: 8.0,
+                              boundaryMargin: const EdgeInsets.all(20),
+                              child: SizedBox.expand(
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: FittedBox(
+                                        fit: BoxFit.contain,
+                                        child: SizedBox(
+                                          width:
+                                              originalImageWidth.toDouble(),
+                                          height:
+                                              originalImageHeight.toDouble(),
+                                          child: Image.file(selectedImage!),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: DetectionPainter(
+                                          detections: detections,
+                                          imageWidth: originalImageWidth,
+                                          imageHeight: originalImageHeight,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        );
-                      },
+                          ),
+                          Positioned(
+                            right: 12,
+                            bottom: 12,
+                            child: Column(
+                              children: [
+                                FloatingActionButton.small(
+                                  heroTag: "zoom_in",
+                                  onPressed: () => _zoom(1.2),
+                                  child: const Icon(Icons.add),
+                                ),
+                                const SizedBox(height: 8),
+                                FloatingActionButton.small(
+                                  heroTag: "zoom_out",
+                                  onPressed: () => _zoom(0.8),
+                                  child: const Icon(Icons.remove),
+                                ),
+                                const SizedBox(height: 8),
+                                FloatingActionButton.small(
+                                  heroTag: "zoom_reset",
+                                  onPressed: _resetZoom,
+                                  child: const Icon(Icons.refresh),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  )
-              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -890,9 +979,9 @@ class DetectionPainter extends CustomPainter {
       );
 
       canvas.drawRect(rect, rectPaint);
-      
+
       final label = box.confidence.toStringAsFixed(2);
-      
+
       final outlinePainter = TextPainter(
         text: TextSpan(
           text: label,

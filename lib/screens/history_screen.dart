@@ -56,12 +56,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text("Detection History"),
+        backgroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             onPressed: historyItems.isEmpty ? null : clearHistory,
-            icon: const Icon(Icons.delete),
+            icon: const Icon(Icons.delete_outline),
             tooltip: "Clear history",
           ),
         ],
@@ -85,7 +88,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 final timestamp = item['timestamp'] ?? '';
 
                 final imageFile = File(imagePath);
-                final imageExists = imagePath.isNotEmpty && imageFile.existsSync();
+                final imageExists =
+                    imagePath.isNotEmpty && imageFile.existsSync();
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(16),
@@ -94,19 +98,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => DetectorScreen(initialImagePath: imagePath),
+                          builder: (_) =>
+                              DetectorScreen(initialImagePath: imagePath),
                         ),
                       );
                     }
                   },
-                  child: Card(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -115,13 +125,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           child: imageExists
                               ? Image.file(
                                   imageFile,
-                                  width: 90,
-                                  height: 90,
+                                  width: 85,
+                                  height: 85,
                                   fit: BoxFit.cover,
                                 )
                               : Container(
-                                  width: 90,
-                                  height: 90,
+                                  width: 85,
+                                  height: 85,
                                   color: Colors.grey.shade300,
                                   child: const Icon(Icons.image, size: 36),
                                 ),
@@ -134,35 +144,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               Text(
                                 imageName,
                                 style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                "Aircraft detected: $aircraftCount",
-                                style: const TextStyle(fontSize: 15),
+                                "✈️ $aircraftCount aircraft detected",
+                                style: const TextStyle(fontSize: 14),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                "Inference time: $inferenceMs ms",
-                                style: const TextStyle(fontSize: 15),
+                                "⚡ $inferenceMs ms",
+                                style: const TextStyle(fontSize: 14),
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                               Text(
                                 formatTimestamp(timestamp),
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   color: Colors.grey.shade700,
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
                       ],
                     ),
                   ),
-                ),
                 );
               },
             ),

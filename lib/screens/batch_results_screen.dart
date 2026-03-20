@@ -25,7 +25,6 @@ class BatchResultsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     final totalImages = results.length;
 
     final totalAircraft = results.fold<int>(
@@ -35,123 +34,150 @@ class BatchResultsScreen extends StatelessWidget {
 
     final avgInference = results.isEmpty
         ? 0
-        : results.fold<int>(0, (sum, r) => sum + r.inferenceMs) ~/ results.length;
+        : results.fold<int>(0, (sum, r) => sum + r.inferenceMs) ~/
+            results.length;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text("Batch Results"),
+        backgroundColor: Colors.white,
+        elevation: 0,
       ),
       body: results.isEmpty
           ? const Center(
-              child: Text("No batch results available"),
+              child: Text(
+                "No batch results available",
+                style: TextStyle(fontSize: 16),
+              ),
             )
-          
           : Column(
               children: [
-
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Batch Summary",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text("Images processed: $totalImages"),
-                          Text("Total aircraft detected: $totalAircraft"),
-                          Text("Average inference time: $avgInference ms"),
-                        ],
+                // 🔹 SUMMARY CARD
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 6,
                       ),
-                    ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Batch Summary",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text("Images processed: $totalImages"),
+                      Text("Total aircraft detected: $totalAircraft"),
+                      Text("Average inference: $avgInference ms"),
+                    ],
                   ),
                 ),
 
+                // 🔹 LIST
                 Expanded(
                   child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                final item = results[index];
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: results.length,
+                    itemBuilder: (context, index) {
+                      final item = results[index];
 
-                return InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => DetectorScreen(
-                          initialImagePath: item.imagePath,
-                          initialBoxes: item.boxes,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Card(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            File(item.imagePath),
-                            width: 90,
-                            height: 90,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) {
-                              return Container(
-                                width: 90,
-                                height: 90,
-                                color: Colors.grey.shade300,
-                                child: const Icon(Icons.image, size: 36),
-                              );
-                            },
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DetectorScreen(
+                                initialImagePath: item.imagePath,
+                                initialBoxes: item.boxes,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 6,
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                item.imageName,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  File(item.imagePath),
+                                  width: 85,
+                                  height: 85,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) {
+                                    return Container(
+                                      width: 85,
+                                      height: 85,
+                                      color: Colors.grey.shade300,
+                                      child: const Icon(Icons.image, size: 36),
+                                    );
+                                  },
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text("Aircraft detected: ${item.aircraftCount}"),
-                              const SizedBox(height: 4),
-                              Text("Inference time: ${item.inferenceMs} ms"),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.imageName,
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      "✈️ ${item.aircraftCount} aircraft",
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "⚡ ${item.inferenceMs} ms",
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward_ios,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
-                );
-              },
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
